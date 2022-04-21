@@ -8,6 +8,8 @@ edition = "2021"
 [dependencies]
 clap = "3"
 walkdir = "2.3"
+regex = "1.5"
+chrono = "0.4"
 
 [dev-dependencies]
 predicates = "2"
