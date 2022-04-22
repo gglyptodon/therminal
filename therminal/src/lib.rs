@@ -1,3 +1,4 @@
+use chrono::Utc;
 use clap::{Arg, Command};
 use regex::Regex;
 use std::error::Error;
@@ -7,7 +8,6 @@ use std::io::{BufRead, Read};
 use std::thread::sleep;
 use std::time;
 use std::time::SystemTime;
-use chrono::Utc;
 use walkdir::DirEntry;
 use walkdir::WalkDir;
 
@@ -102,7 +102,7 @@ pub fn open(filename: &str) -> TherminalResult<Box<dyn BufRead>> {
 }
 
 pub fn get_available_temp_sensors() -> TherminalResult<Vec<String>> {
-    let interesting = [Regex::new(r"^temp$")?, Regex::new(r"temp.*_input")?];
+    let interesting = [Regex::new(r"^temp$")?, Regex::new(r"^temp.*_input$")?];
     //let only_files = |entry: &DirEntry| entry.file_type().is_file();
 
     let name_filter = |entry: &DirEntry| {
