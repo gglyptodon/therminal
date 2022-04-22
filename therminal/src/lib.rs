@@ -7,26 +7,31 @@ use std::fs::File;
 use std::io::{BufRead, Read};
 use std::thread::sleep;
 use std::time;
-use std::time::SystemTime;
 use walkdir::DirEntry;
-use walkdir::WalkDir;
 
 pub type TherminalResult<T> = Result<T, Box<dyn Error>>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     refresh_rate: u64, //seconds
+    threshold: Option<f32>,
+    sensor_id: Option<String>,
 }
 #[derive(Debug)]
 pub struct ThermalInfo {
     temp: f32,
     info: String,
     kind: String,
+    id: String,
 }
 
 impl Display for ThermalInfo {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}C\t{}\t{}", self.temp, self.info, self.kind)
+        write!(
+            f,
+            "{}C\t{}\t{}\t{}",
+            self.temp, self.info, self.kind, self.id
+        )
     }
 }
 
@@ -38,7 +43,46 @@ pub fn run(config: Config) -> TherminalResult<()> {
 
         //println!("{:#?}", read_temp_data()?);
         for t in read_temp_data()? {
-            println!("{}", t);
+            match config.clone().sensor_id {
+                Some(sensor) => {
+                    if t.id.ends_with(&*sensor) {
+                        println!(
+                            "{}\t{}\t{}",
+                            t.id,
+                            t.temp,
+                            if config
+                                .threshold
+                                .is_some()
+                                .then(|| config.threshold.unwrap())
+                                >= Some(t.temp)
+                            {
+                                ""
+                            } else {
+                                "!"
+                            }
+                        )
+                    }
+                }
+                _ => {
+                    println!(
+                        "{}\t{}\t{}",
+                        t.id,
+                        t.temp,
+                        if config
+                            .threshold
+                            .is_some()
+                            .then(|| config.threshold.unwrap())
+                            >= Some(t.temp)
+                        {
+                            ""
+                        } else {
+                            "!"
+                        }
+                    )
+                }
+            }
+
+            //println!("{}", t);
         }
         sleep(time::Duration::from_secs(config.refresh_rate));
     }
@@ -56,12 +100,38 @@ pub fn parse_args() -> TherminalResult<Config> {
                 .default_value("30")
                 .help("read sensor values again after SEC seconds"),
         )
+        .arg(
+            Arg::new("threshold")
+                .short('t')
+                .long("threshold")
+                .value_name("C")
+                .takes_value(true)
+                .required(false),
+        )
+        .arg(
+            Arg::new("sensor_id")
+                .short('s')
+                .long("sensor-id")
+                .value_name("SENSOR")
+                .takes_value(true)
+                .required(false),
+        )
         .get_matches();
     let refresh_rate = matches
         .value_of("refresh_rate")
         .unwrap_or_default()
         .parse::<u64>()?;
-    Ok(Config { refresh_rate })
+    let threshold = match matches.value_of("threshold") {
+        Some(t) => Some(t.parse::<f32>()?),
+        None => None,
+    };
+
+    let sensor_id = matches.value_of("sensor_id").map(String::from);
+    Ok(Config {
+        refresh_rate,
+        threshold,
+        sensor_id,
+    })
 }
 
 fn read_temp_data() -> TherminalResult<Vec<ThermalInfo>> {
@@ -74,8 +144,9 @@ fn read_temp_data() -> TherminalResult<Vec<ThermalInfo>> {
             let value_in_celsius = raw_value as f32 / 1000.0;
             results.push(ThermalInfo {
                 temp: value_in_celsius,
-                info: sf,
+                info: sf.clone(),
                 kind: "TODO".to_string(),
+                id: sf.clone(),
             })
         }
     }
