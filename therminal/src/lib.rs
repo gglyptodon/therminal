@@ -37,57 +37,39 @@ impl Display for ThermalInfo {
 
 pub fn run(config: Config) -> TherminalResult<()> {
     //println!("{:#?}", config);
+    let show_with_threshold = |t: &ThermalInfo| {
+        if let Some(threshold) = config.threshold {
+            match (
+                threshold * 1.5 < t.temp,
+                threshold * 1.2 < t.temp,
+                threshold < t.temp,
+            ) {
+                (true, _, _) => "!!!",
+                (_, true, _) => "!!",
+                (_, _, true) => "!",
+                _ => "",
+            }
+        } else {
+            ""
+        }
+    };
 
     loop {
         println!("\t# {} #", Utc::now().to_rfc2822());
-
-        //println!("{:#?}", read_temp_data()?);
         for t in read_temp_data()? {
             match config.clone().sensor_id {
                 Some(sensor) => {
                     if t.id.ends_with(&*sensor) {
-                        println!(
-                            "{}\t{}\t{}",
-                            t.id,
-                            t.temp,
-                            if config
-                                .threshold
-                                .is_some()
-                                .then(|| config.threshold.unwrap())
-                                >= Some(t.temp)
-                            {
-                                ""
-                            } else {
-                                "!"
-                            }
-                        )
+                        println!("{}\t{}\t{}", t.id, t.temp, show_with_threshold(&t))
                     }
                 }
                 _ => {
-                    println!(
-                        "{}\t{}\t{}",
-                        t.id,
-                        t.temp,
-                        if config
-                            .threshold
-                            .is_some()
-                            .then(|| config.threshold.unwrap())
-                            >= Some(t.temp)
-                        {
-                            ""
-                        } else {
-                            "!"
-                        }
-                    )
+                    println!("{}\t{}\t{}", t.id, t.temp, show_with_threshold(&t))
                 }
             }
-
-            //println!("{}", t);
         }
         sleep(time::Duration::from_secs(config.refresh_rate));
     }
-
-    // Ok(())
 }
 
 pub fn parse_args() -> TherminalResult<Config> {
