@@ -4,9 +4,9 @@ use clap::{Arg, Command};
 use cursive::align::HAlign;
 use cursive::event::{Event, Key::Esc};
 use cursive::view::{Nameable, Resizable};
+use cursive::views::Dialog;
 use cursive::{Cursive, CursiveExt};
 use cursive_table_view::{TableView, TableViewItem};
-use cursive::views::{Dialog};
 
 use regex::Regex;
 use walkdir::DirEntry;
@@ -18,7 +18,7 @@ use std::fs::File;
 use std::io::{BufRead, Read};
 use std::thread::sleep;
 use std::time;
-use std::time::{SystemTime};
+use std::time::SystemTime;
 
 pub type TherminalResult<T> = Result<T, Box<dyn Error>>;
 
@@ -32,9 +32,9 @@ pub struct Config {
 #[derive(Debug, Clone)]
 pub struct ThermalInfo {
     temp: f32,
-    info: String,
+    sensor: String,
     kind: String,
-    id: String,
+    name: String,
 }
 
 impl Display for ThermalInfo {
@@ -42,7 +42,7 @@ impl Display for ThermalInfo {
         write!(
             f,
             "{}C\t{}\t{}\t{}",
-            self.temp, self.info, self.kind, self.id
+            self.temp, self.sensor, self.kind, self.name
         )
     }
 }
@@ -74,12 +74,12 @@ pub fn run(config: Config) -> TherminalResult<()> {
             for t in read_temp_data()? {
                 match config.clone().sensor_id {
                     Some(sensor) => {
-                        if t.id.ends_with(&*sensor) {
-                            println!("{}\t{}\t{}", t.id, t.temp, show_with_threshold(&t))
+                        if t.name.ends_with(&*sensor) {
+                            println!("{}\t{:>4}\t{}", t.name, t.temp, show_with_threshold(&t))
                         }
                     }
                     _ => {
-                        println!("{}\t{}\t{}", t.id, t.temp, show_with_threshold(&t))
+                        println!("{}\t{:>4}\t{}", t.name, t.temp, show_with_threshold(&t))
                     }
                 }
             }
@@ -151,14 +151,15 @@ fn read_temp_data_after(
         let sensor_files = get_available_temp_sensors()?;
         for sf in sensor_files {
             if let Ok(res) = read_file_to_string(&sf) {
+                let label = get_label_for_sensor(&sf)?;
                 let file_contents: String = res.split_whitespace().collect();
                 let raw_value = file_contents.parse::<usize>()?;
                 let value_in_celsius = raw_value as f32 / 1000.0;
                 readings.push(ThermalInfo {
                     temp: value_in_celsius,
-                    info: sf.clone(),
+                    sensor: sf.clone(),
                     kind: "TODO".to_string(),
-                    id: sf.clone(),
+                    name: label,
                 })
             }
         }
@@ -172,14 +173,16 @@ fn read_temp_data() -> TherminalResult<Vec<ThermalInfo>> {
     let sensor_files = get_available_temp_sensors()?;
     for sf in sensor_files {
         if let Ok(res) = read_file_to_string(&sf) {
+            let label = get_label_for_sensor(&sf)?;
+            //println!("label {label}");
             let file_contents: String = res.split_whitespace().collect();
             let raw_value = file_contents.parse::<usize>()?;
             let value_in_celsius = raw_value as f32 / 1000.0;
             results.push(ThermalInfo {
                 temp: value_in_celsius,
-                info: sf.clone(),
+                sensor: sf.clone(),
                 kind: "TODO".to_string(),
-                id: sf.clone(),
+                name: label,//sf.clone(),
             })
         }
     }
@@ -204,7 +207,24 @@ pub fn open(filename: &str) -> TherminalResult<Box<dyn BufRead>> {
         _ => Ok(Box::new(std::io::BufReader::new(File::open(filename)?))),
     }
 }
+pub fn get_label_for_sensor(path: &str)-> TherminalResult<String> {
+    let mut result = String::new();
+    if path.ends_with("_input") { //hwmon
+        if let Ok(mut bufread ) = open(&*path.replace("input", "label")) {
+            bufread.read_to_string(&mut result)?;
+        }
+    }
+    else if path.ends_with("temp"){
+           if let Ok(mut bufread ) = open(&*path.replace("temp", "type")) {
+            bufread.read_to_string(&mut result)?;
+        }
 
+    }
+    if !result.is_empty(){
+        result = result.split_whitespace().collect::<String>();
+    }
+   Ok(result)
+}
 pub fn get_available_temp_sensors() -> TherminalResult<Vec<String>> {
     let interesting = [Regex::new(r"^temp$")?, Regex::new(r"^temp.*_input$")?];
     //let only_files = |entry: &DirEntry| entry.file_type().is_file();
@@ -239,17 +259,17 @@ pub fn get_available_temp_sensors() -> TherminalResult<Vec<String>> {
 // --- TUI --- \\
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum ThermalInfoColumn {
-    Info,
+    Sensor,
     Temp,
-    Id,
+    Name,
 }
 
 impl TableViewItem<ThermalInfoColumn> for ThermalInfo {
     fn to_column(&self, column: ThermalInfoColumn) -> String {
         match column {
-            ThermalInfoColumn::Info => self.info.to_string(),
+            ThermalInfoColumn::Sensor => self.sensor.to_string(),
             ThermalInfoColumn::Temp => format!("{}", self.temp),
-            ThermalInfoColumn::Id => self.id.to_string(),
+            ThermalInfoColumn::Name => self.name.to_string(),
         }
     }
 
@@ -258,9 +278,9 @@ impl TableViewItem<ThermalInfoColumn> for ThermalInfo {
         Self: Sized,
     {
         match column {
-            ThermalInfoColumn::Info => self.info.cmp(&other.info),
+            ThermalInfoColumn::Sensor => self.sensor.cmp(&other.sensor),
             ThermalInfoColumn::Temp => self.temp.partial_cmp(&other.temp).unwrap(),
-            ThermalInfoColumn::Id => self.id.cmp(&other.id),
+            ThermalInfoColumn::Name => self.name.cmp(&other.name),
         }
     }
 }
@@ -305,11 +325,11 @@ fn tui(config: &Config) -> TherminalResult<()> {
     siv.set_autorefresh(true);
 
     let mut table = TableView::<ThermalInfo, ThermalInfoColumn>::new()
-        .column(ThermalInfoColumn::Info, "Info", |c| c.width_percent(55))
+        .column(ThermalInfoColumn::Sensor, "Sensor", |c| c.width_percent(55))
         .column(ThermalInfoColumn::Temp, "Temp (°C)", |c| {
             c.align(HAlign::Center).width_percent(15)
         })
-        .column(ThermalInfoColumn::Id, "ID", |c| {
+        .column(ThermalInfoColumn::Name, "Name", |c| {
             c.ordering(Ordering::Greater).align(HAlign::Right)
         });
     table.set_items(items);
