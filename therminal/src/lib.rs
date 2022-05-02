@@ -228,7 +228,7 @@ pub fn get_label_for_sensor(path: &str)-> TherminalResult<String> {
     if !result.is_empty(){
         result = result.split_whitespace().collect::<String>();
         if !result_name.is_empty(){
-            result = format!("[{}] {}",result, result_name.split_whitespace().collect::<String>());
+            result = format!("{} [{}]",result, result_name.split_whitespace().collect::<String>());
         }
     }
    Ok(result)
