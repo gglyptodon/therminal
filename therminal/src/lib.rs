@@ -209,9 +209,13 @@ pub fn open(filename: &str) -> TherminalResult<Box<dyn BufRead>> {
 }
 pub fn get_label_for_sensor(path: &str)-> TherminalResult<String> {
     let mut result = String::new();
+    let mut result_name = String::new();
     if path.ends_with("_input") { //hwmon
         if let Ok(mut bufread ) = open(&*path.replace("input", "label")) {
             bufread.read_to_string(&mut result)?;
+          if let Ok(mut bufread ) = open(&path.replace(path.split('/').last().unwrap(), "name")) {
+            bufread.read_to_string(&mut result_name)?;
+            }
         }
     }
     else if path.ends_with("temp"){
@@ -219,9 +223,13 @@ pub fn get_label_for_sensor(path: &str)-> TherminalResult<String> {
             bufread.read_to_string(&mut result)?;
         }
 
+
     }
     if !result.is_empty(){
         result = result.split_whitespace().collect::<String>();
+        if !result_name.is_empty(){
+            result = format!("[{}] {}",result, result_name.split_whitespace().collect::<String>());
+        }
     }
    Ok(result)
 }
@@ -325,12 +333,12 @@ fn tui(config: &Config) -> TherminalResult<()> {
     siv.set_autorefresh(true);
 
     let mut table = TableView::<ThermalInfo, ThermalInfoColumn>::new()
-        .column(ThermalInfoColumn::Sensor, "Sensor", |c| c.width_percent(55))
+        .column(ThermalInfoColumn::Sensor, "Sensor", |c| c.width_percent(45))
         .column(ThermalInfoColumn::Temp, "Temp (°C)", |c| {
-            c.align(HAlign::Center).width_percent(15)
+            c.align(HAlign::Center).width_percent(10)
         })
         .column(ThermalInfoColumn::Name, "Name", |c| {
-            c.ordering(Ordering::Greater).align(HAlign::Right)
+            c.ordering(Ordering::Greater).align(HAlign::Left)
         });
     table.set_items(items);
 
@@ -339,7 +347,7 @@ fn tui(config: &Config) -> TherminalResult<()> {
             table
                 .with_name("table")
                 .max_size((800, 600))
-                .min_size((80, 60)),
+                .min_size((100, 60)),
         )
         .title("Thermal Info"),
     );
