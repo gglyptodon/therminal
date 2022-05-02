@@ -10,6 +10,8 @@ clap = "3"
 walkdir = "2.3"
 regex = "1.5"
 chrono = "0.4"
+cursive = "0.18"
+cursive_table_view = "0.14"
 
 [dev-dependencies]
 predicates = "2"
